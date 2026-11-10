@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PhonemTranscriptor — demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div>
+        <h1>PhonemTranscriptor</h1>
+        <p>Áudio de voz → fonemas com tempo + notas MIDI (Whisper · SOFA/MMS · GAME)</p>
+      </div>
+    </div>
+    <label class="picker">
+      Exemplo
+      <select id="example"></select>
+    </label>
+  </header>
+
+  <section class="summary" id="summary"></section>
+
+  <section class="panel">
+    <div class="transport">
+      <button id="play" class="btn primary" disabled>▶ Play</button>
+      <span class="time" id="time">0:00.0 / 0:00.0</span>
+      <label class="ctl">Voz <input id="volVoice" type="range" min="0" max="1" step="0.01" value="0.9" /></label>
+      <label class="ctl">Synth GAME <input id="volSynth" type="range" min="0" max="1" step="0.01" value="0.25" /></label>
+      <label class="ctl">Zoom <input id="zoom" type="range" min="20" max="400" step="1" value="90" /></label>
+      <span class="spacer"></span>
+      <label class="chk"><input id="showGame" type="checkbox" checked /> <i class="sw game"></i>GAME</label>
+      <label class="chk"><input id="showRef" type="checkbox" checked /> <i class="sw ref"></i>Referência</label>
+      <label class="chk"><input id="follow" type="checkbox" checked /> Seguir</label>
+    </div>
+
+    <div class="stage" id="stage">
+      <canvas id="canvas"></canvas>
+      <div class="tooltip" id="tooltip" hidden></div>
+      <div class="loading" id="loading"><div class="spin"></div><span>Carregando…</span></div>
+    </div>
+    <input id="scroll" class="hscroll" type="range" min="0" max="1000" step="1" value="0" />
+    <p class="hint">Clique para posicionar · roda do mouse rola no tempo · Ctrl/⌘ + roda dá zoom · espaço toca/pausa</p>
+  </section>
+
+  <section class="panel now" id="now"></section>
+
+  <section class="panel">
+    <h2>Fonemas</h2>
+    <div class="table-wrap">
+      <table id="phonemes">
+        <thead><tr><th>#</th><th>Início</th><th>Fim</th><th>Fonema</th><th>Palavra</th><th>Nota GAME</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span id="credit"></span>
+    · <a href="https://github.com/JoaquimBreno/PhonemTranscriptor">GitHub</a>
+  </footer>
+
+  <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "angels",
+    "title": "Angels We Have Heard on High",
+    "credit": "CSD en002a, Children's Song Dataset (CC BY-NC-SA 4.0), trecho 0–47 s",
+    "audio": "examples/angels.mp3",
+    "result": "examples/angels.json",
+    "reference": "examples/angels.reference.json"
+  }
+]
