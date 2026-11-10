@@ -8,7 +8,7 @@ Takes a sung vocal (a cappella or a separated stem) and returns:
 - **MIDI notes** of the melody transcribed by [GAME](https://github.com/openvpi/GAME), each note carrying the phonemes that fall on it;
 - a **`.mid`** file with the notes and the phonemes written as `lyrics` events.
 
-**Interactive demo:** <https://joaquimbreno.github.io/PhonemTranscriptor/> (source in [`docs/`](docs/)).
+**Interactive demo:** [`docs/`](docs/). Run `cd docs && python -m http.server 8000` and open <http://localhost:8000>.
 
 ![Demo](docs/screenshot.png)
 

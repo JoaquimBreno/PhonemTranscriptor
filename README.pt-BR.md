@@ -8,7 +8,7 @@ Recebe o áudio de uma voz cantada (a cappella ou stem separado) e devolve:
 - **notas MIDI** da melodia transcritas pelo [GAME](https://github.com/openvpi/GAME), cada nota com os fonemas que caem nela;
 - um **`.mid`** com as notas e os fonemas gravados como eventos `lyrics`.
 
-**Demo interativa:** <https://joaquimbreno.github.io/PhonemTranscriptor/> (código em [`docs/`](docs/)).
+**Demo interativa:** [`docs/`](docs/). Rode `cd docs && python -m http.server 8000` e abra <http://localhost:8000>.
 
 ![Demo](docs/screenshot.png)
 
