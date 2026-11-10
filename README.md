@@ -1,91 +1,93 @@
 # PhonemTranscriptor
 
-Recebe o áudio de uma voz cantada (a cappella ou stem separado) e devolve:
+**English** · [Português](README.pt-BR.md)
 
-- **fonemas com tempo** (início/fim de cada fonema, com a palavra de origem);
-- **notas MIDI** da melodia transcritas pelo [GAME](https://github.com/openvpi/GAME), cada nota com os fonemas que caem nela;
-- um **`.mid`** com as notas e os fonemas gravados como eventos `lyrics`.
+Takes a sung vocal (a cappella or a separated stem) and returns:
 
-**Demo interativa:** <https://joaquimbreno.github.io/PhonemTranscriptor/> (código em [`docs/`](docs/)).
+- **timed phonemes** (start/end of each phoneme, with the word it belongs to);
+- **MIDI notes** of the melody transcribed by [GAME](https://github.com/openvpi/GAME), each note carrying the phonemes that fall on it;
+- a **`.mid`** file with the notes and the phonemes written as `lyrics` events.
+
+**Interactive demo:** <https://joaquimbreno.github.io/PhonemTranscriptor/> (source in [`docs/`](docs/)).
 
 ![Demo](docs/screenshot.png)
 
-## Como funciona
+## How it works
 
 ```mermaid
 flowchart LR
-    A[áudio] --> W[faster-whisper large-v3-turbo<br/>idioma + palavras com tempo]
-    W --> R{idioma}
-    R -- en / zh / ko --> S[SOFA<br/>alinhamento forçado]
-    R -- pt / es / outros --> M[MMS forced aligner<br/>+ dicionário MFA]
-    S --> P[fonemas com tempo]
+    A[audio] --> W[faster-whisper large-v3-turbo<br/>language + timed words]
+    W --> R{language}
+    R -- en / zh / ko --> S[SOFA<br/>forced alignment]
+    R -- pt / es / others --> M[MMS forced aligner<br/>+ MFA dictionary]
+    S --> P[timed phonemes]
     M --> P
-    A --> G[GAME Medium<br/>notas MIDI]
+    A --> G[GAME Medium<br/>MIDI notes]
     P --> J[JSON + MIDI]
     G --> J
 ```
 
-1. **ASR** — `faster-whisper` (`large-v3-turbo`) detecta o idioma e transcreve as palavras com tempo. Usa `condition_on_previous_text=False` e VAD para não repetir a letra em trechos instrumentais.
-2. **Alinhamento de fonemas** — por idioma:
+1. **ASR**: `faster-whisper` (`large-v3-turbo`) detects the language and transcribes timed words. It runs with `condition_on_previous_text=False` and VAD, so instrumental bridges don't get filled with repeated lyrics.
+2. **Phoneme alignment**, per language:
 
-   | Idioma | Alinhador | Fonemas | Modelo / dicionário |
+   | Language | Aligner | Phonemes | Model / dictionary |
    |---|---|---|---|
    | en | SOFA | ARPAbet | `tgm_en_v100.ckpt` (spicytigermeat) |
    | zh | SOFA | pinyin (opencpop) | `v1.0.0_mandarin_singing.ckpt` |
    | ko | SOFA | hangul table | `korean-v2.0-12000.ckpt` (colstone) |
    | pt, es | MMS (torchaudio) | IPA (MFA) | `portuguese_mfa.dict`, `spanish_mfa.dict` |
-   | outros | MMS | romanização (uroman) | — |
+   | others | MMS | romanization (uroman) | — |
 
-3. **Notas** — o GAME Medium transcreve a melodia. O pós-processamento é o mesmo do editor do PitchNet: descarta pausas e notas curtas e refina as bordas com VAD. O GAME roda em um subprocesso (`game_worker.py`), porque ele e o SOFA têm pacotes de topo com o mesmo nome (`lib`, `modules`).
-4. **Junção** — cada fonema é associado à nota com que mais se sobrepõe no tempo.
+3. **Notes**: GAME Medium transcribes the melody. Post-processing matches the PitchNet editor: it drops rests and short notes, then refines the note edges with VAD. GAME runs in a subprocess (`game_worker.py`) because it and SOFA both ship top-level packages with the same names (`lib`, `modules`).
+4. **Merge**: each phoneme is attached to the note it overlaps most in time.
 
-## Exemplo
+## Example
 
-[`examples/`](examples/) traz um trecho de 47 s de *Angels We Have Heard on High* (canção tradicional, domínio público), gravado pelo [Children's Song Dataset](https://zenodo.org/records/4785016) (CSD `en002a`, CC BY-NC-SA 4.0).
+[`examples/`](examples/) has a 47 s excerpt of *Angels We Have Heard on High* (traditional, public domain), recorded for the [Children's Song Dataset](https://zenodo.org/records/4785016) (CSD `en002a`, CC BY-NC-SA 4.0).
 
-| Arquivo | Conteúdo |
+| File | Content |
 |---|---|
-| `angels.wav` | entrada (mono, 44.1 kHz) |
-| `angels.json` | saída da CLI |
-| `angels.mid` | notas GAME + fonemas como `lyrics` |
-| `angels.reference.json` | partitura de referência do CSD, para comparar |
+| `angels.wav` | input (mono, 44.1 kHz) |
+| `angels.json` | CLI output |
+| `angels.mid` | GAME notes + phonemes as `lyrics` |
+| `angels.reference.json` | CSD reference score, for comparison |
 
-Contra a referência do CSD, o GAME acerta a altura exata em **87.8 %** dos quadros cantados e detecta voz em **99.6 %** deles.
+Against the CSD reference, GAME gets the exact pitch on **87.8 %** of sung frames and detects voice on **99.6 %** of them.
 
 ```bash
 phonem-transcriptor examples/angels.wav -o examples/angels.json
 # en via sofa: 94 fonemas, GAME lang 1, 92 notas -> examples/angels.json | examples/angels.mid
 ```
 
-## Estrutura
+## Layout
 
 ```
-phonem_transcriptor/      pacote
-  cli.py                  CLI `phonem-transcriptor`
+phonem_transcriptor/      package
+  cli.py                  `phonem-transcriptor` CLI
   pipeline.py             transcribe(): Whisper -> SOFA/MMS -> GAME
   whisper_asr.py          faster-whisper
-  routing.py              escolhe SOFA ou MMS por idioma
-  sofa_align.py           alinhamento SOFA (en/zh/ko)
-  mms_align.py, phones.py alinhamento MMS + fonemas do dicionário (pt/es/...)
-  g2p.py                  dicionários e romanização
-  game_midi.py            chama o worker, junta notas e fonemas, escreve o .mid
-  game_worker.py          subprocesso do GAME
-  game_transcribe.py      inferência do GAME Medium
-  game_postprocess.py     pós-processamento das notas (porte do PitchNet)
-  game_lang.py            idioma Whisper -> id de idioma do GAME
-  download.py             baixa os modelos em models/
+  routing.py              picks SOFA or MMS per language
+  sofa_align.py           SOFA alignment (en/zh/ko)
+  mms_align.py, phones.py MMS alignment + dictionary phonemes (pt/es/...)
+  g2p.py                  dictionaries and romanization
+  game_midi.py            runs the worker, merges notes and phonemes, writes the .mid
+  game_worker.py          GAME subprocess
+  game_transcribe.py      GAME Medium inference
+  game_postprocess.py     note post-processing (PitchNet port)
+  game_lang.py            Whisper language -> GAME language id
+  download.py             downloads the models into models/
 third_party/
-  SOFA/                   qiuqiao/SOFA v1.0.3 (MIT), sem alterações
-  GAME/                   openvpi/GAME (MIT), sem alterações
-tests/                    testes unitários (unittest)
-examples/                 áudio de exemplo + saída
-docs/                     demo estática (GitHub Pages)
-models/                   checkpoints (fora do git)
+  SOFA/                   qiuqiao/SOFA v1.0.3 (MIT), unmodified
+  GAME/                   openvpi/GAME (MIT), unmodified
+tests/                    unit tests (unittest)
+examples/                 example audio + output
+docs/                     static demo (GitHub Pages)
+models/                   checkpoints (not in git)
 ```
 
-## Instalação
+## Installation
 
-Python 3.11 e PyTorch com CUDA (testado com torch/torchaudio 2.5.1+cu121, numa A100). Também roda em CPU, só que bem mais devagar.
+Python 3.11 and PyTorch with CUDA (tested with torch/torchaudio 2.5.1+cu121 on an A100). It also runs on CPU, just much slower.
 
 ```bash
 conda create -n phonem python=3.11 -y
@@ -94,15 +96,15 @@ pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.
 pip install -e .
 ```
 
-## Modelos
+## Models
 
-Os checkpoints (~4.8 GB) ficam em `models/`, fora do git. Há duas formas de obtê-los.
+The checkpoints (~4.8 GB) live in `models/`, outside git. There are two ways to get them.
 
-### Opção A — Google Drive (tudo de uma vez)
+### Option A: Google Drive (everything at once)
 
-Pasta: **[PhonemTranscriptor/models](https://drive.google.com/drive/folders/1xmtJ2XSF4XHEY7j4p9WJAkI3zM-ULkb9)**
+Folder: **[PhonemTranscriptor/models](https://drive.google.com/drive/folders/1xmtJ2XSF4XHEY7j4p9WJAkI3zM-ULkb9)**
 
-Ela espelha `models/` com os arquivos já no lugar:
+It mirrors `models/` with every file already in place:
 
 ```
 models/
@@ -115,48 +117,48 @@ models/
 
 ```bash
 pip install gdown
-gdown --folder https://drive.google.com/drive/folders/1xmtJ2XSF4XHEY7j4p9WJAkI3zM-ULkb9 -O .   # cria ./models
-# ou, com acesso à conta via rclone:
+gdown --folder https://drive.google.com/drive/folders/1xmtJ2XSF4XHEY7j4p9WJAkI3zM-ULkb9 -O .   # creates ./models
+# or, with rclone access to the account:
 rclone copy gdrive:PhonemTranscriptor/models models
 ```
 
-### Opção B — fontes originais
+### Option B: original sources
 
 ```bash
 python -m phonem_transcriptor.download
 ```
 
-Baixa cada modelo da sua origem: Whisper (Hugging Face), SOFA en/zh/ko (GitHub releases), dicionários MFA, MMS (torchaudio) e GAME Medium ([openvpi/GAME v1.0.0](https://github.com/openvpi/GAME/releases/tag/v1.0.0)). Ao terminar, grava `models/manifest.json`.
+Downloads each model from its origin: Whisper (Hugging Face), SOFA en/zh/ko (GitHub releases), MFA dictionaries, MMS (torchaudio) and GAME Medium ([openvpi/GAME v1.0.0](https://github.com/openvpi/GAME/releases/tag/v1.0.0)). When it finishes, it writes `models/manifest.json`.
 
-## Uso
+## Usage
 
 ```bash
-phonem-transcriptor voz.wav -o saida.json            # idioma detectado
-phonem-transcriptor voz.wav -o saida.json --lang pt  # força o idioma (auto, en, pt, es, zh, ko)
+phonem-transcriptor vocal.wav -o out.json            # language auto-detected
+phonem-transcriptor vocal.wav -o out.json --lang pt  # force language (auto, en, pt, es, zh, ko)
 ```
 
-Gera `saida.json` e `saida.mid`.
+Writes `out.json` and `out.mid`.
 
 ```python
 from phonem_transcriptor import transcribe
 
-result = transcribe("voz.wav", language="auto", midi_path="voz.mid")
+result = transcribe("vocal.wav", language="auto", midi_path="vocal.mid")
 ```
 
-### Formato da saída
+### Output format
 
 ```jsonc
 {
   "language": "en",
-  "aligner": "sofa",                 // "sofa" ou "mms"
+  "aligner": "sofa",                 // "sofa" or "mms"
   "phonemes": [
     {"phoneme": "ey", "start": 2.112, "end": 2.301, "word": "Angels"}
-    // MMS pode incluir "phoneme_source": "romanized" quando a palavra não está no dicionário
+    // MMS may add "phoneme_source": "romanized" when the word is not in the dictionary
   ],
   "game": {
-    "language_id": 1,                // id de idioma usado no GAME (0 = universal)
+    "language_id": 1,                // language id used by GAME (0 = universal)
     "model": "GAME-1.0-medium",
-    "midi": "saida.mid",
+    "midi": "out.mid",
     "notes": [
       {"pitch": 69, "onset": 2.14, "offset": 2.65, "velocity": 80,
        "phonemes": ["ey", "n"], "words": ["Angels"]}
@@ -165,16 +167,16 @@ result = transcribe("voz.wav", language="auto", midi_path="voz.mid")
 }
 ```
 
-### Variáveis de ambiente
+### Environment variables
 
-| Variável | Uso |
+| Variable | Purpose |
 |---|---|
-| `PHONEM_GAME_MODEL` | outra pasta de checkpoint do GAME (padrão `models/GAME-1.0-medium`) |
-| `PHONEM_GAME_PYTHON` | outro interpretador para o worker do GAME (padrão: o mesmo Python) |
+| `PHONEM_GAME_MODEL` | alternative GAME checkpoint folder (default `models/GAME-1.0-medium`) |
+| `PHONEM_GAME_PYTHON` | alternative interpreter for the GAME worker (default: the same Python) |
 
-O GAME amostra as bordas das notas por difusão (D3PM). `transcribe_wav` fixa `seed=0`, então a saída se repete entre execuções.
+GAME samples note boundaries with diffusion (D3PM). `transcribe_wav` fixes `seed=0`, so the output repeats across runs.
 
-## Testes
+## Tests
 
 ```bash
 python -m unittest discover -s tests
@@ -182,29 +184,29 @@ python -m unittest discover -s tests
 
 ## Demo (GitHub Pages)
 
-`docs/` é um site estático, sem build: piano roll com as notas do GAME e da referência, forma de onda, faixas de palavras e fonemas, synth das notas, zoom e clique para posicionar. Os exemplos são listados em `docs/examples/manifest.json`.
+`docs/` is a static site with no build step: a piano roll with the GAME and reference notes, waveform, word and phoneme lanes, a note synth, zoom and click-to-seek. Examples are listed in `docs/examples/manifest.json`.
 
-Para adicionar um exemplo, gere a saída com a CLI, copie o áudio (MP3 de preferência) e o JSON para `docs/examples/` e acrescente uma entrada no manifesto. O campo `reference` é opcional. Para testar localmente:
+To add an example, generate the output with the CLI, copy the audio (preferably MP3) and the JSON into `docs/examples/`, and add an entry to the manifest. The `reference` field is optional. To try it locally:
 
 ```bash
 cd docs && python -m http.server 8000
 ```
 
-Nas configurações do repositório, o Pages publica a partir de `main` / `docs`.
+In the repository settings, Pages publishes from `main` / `docs`.
 
-## Limitações
+## Limitations
 
-- A letra depende do Whisper. Melismas longos e latim (*"Gloria in excelsis Deo"* no exemplo) podem sair sem fonemas ou com a palavra errada.
-- No MMS (pt/es), os fonemas herdam o tempo das letras alinhadas e ficam com ~20 ms. O SOFA dá durações reais.
-- O GAME Medium só tem embedding treinado para en, ja, yue e zh. Os outros idiomas usam o embedding universal (id 0).
+- Lyrics depend on Whisper. Long melismas and Latin (*"Gloria in excelsis Deo"* in the example) can end up with no phonemes or the wrong word.
+- With MMS (pt/es), phonemes inherit the timing of the aligned letters and last ~20 ms. SOFA gives real durations.
+- GAME Medium only has trained language embeddings for en, ja, yue and zh. Other languages use the universal embedding (id 0).
 
-## Licenças e créditos
+## Licenses and credits
 
-- Código deste repositório: veja abaixo as licenças dos componentes incorporados.
-- [SOFA](https://github.com/qiuqiao/SOFA) — MIT. Checkpoints: [spicytigermeat/SOFA-Models](https://github.com/spicytigermeat/SOFA-Models) (en), [qiuqiao/SOFA](https://github.com/qiuqiao/SOFA/releases) (zh), [colstone/SOFA_Models](https://github.com/colstone/SOFA_Models) (ko).
-- [GAME](https://github.com/openvpi/GAME) — MIT, Team OpenVPI.
-- `game_postprocess.py` é um porte do `EditorController` do [PitchNet](https://github.com/SessionLoops/PitchNet), que é **AGPL-3.0**.
-- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (MIT); pesos [`mobiuslabsgmbh/faster-whisper-large-v3-turbo`](https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo) (MIT).
-- [MMS forced aligner](https://pytorch.org/audio/stable/pipelines.html#torchaudio.pipelines.MMS_FA) — pesos CC BY-NC 4.0.
-- Dicionários [MFA](https://github.com/MontrealCorpusTools/mfa-models) — CC BY 4.0.
-- Áudio de exemplo: [Children's Song Dataset](https://zenodo.org/records/4785016) — CC BY-NC-SA 4.0.
+- Code in this repository: see the licenses of the bundled components below.
+- [SOFA](https://github.com/qiuqiao/SOFA): MIT. Checkpoints: [spicytigermeat/SOFA-Models](https://github.com/spicytigermeat/SOFA-Models) (en), [qiuqiao/SOFA](https://github.com/qiuqiao/SOFA/releases) (zh), [colstone/SOFA_Models](https://github.com/colstone/SOFA_Models) (ko).
+- [GAME](https://github.com/openvpi/GAME): MIT, Team OpenVPI.
+- `game_postprocess.py` is a port of the `EditorController` from [PitchNet](https://github.com/SessionLoops/PitchNet), which is **AGPL-3.0**.
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (MIT); weights [`mobiuslabsgmbh/faster-whisper-large-v3-turbo`](https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo) (MIT).
+- [MMS forced aligner](https://pytorch.org/audio/stable/pipelines.html#torchaudio.pipelines.MMS_FA): weights CC BY-NC 4.0.
+- [MFA](https://github.com/MontrealCorpusTools/mfa-models) dictionaries: CC BY 4.0.
+- Example audio: [Children's Song Dataset](https://zenodo.org/records/4785016), CC BY-NC-SA 4.0.
